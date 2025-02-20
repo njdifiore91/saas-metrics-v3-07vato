@@ -1,0 +1,210 @@
+version: "3.8"
+
+services:
+  # API Gateway Service
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      target: development
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - AUTH_SERVICE_URL=auth:3000
+      - METRICS_SERVICE_URL=metrics:50051
+      - BENCHMARK_SERVICE_URL=benchmark:50051
+      - DEBUG_PORT=9229
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services/api-gateway:/usr/src/app:delegated
+      - api_gateway_node_modules:/usr/src/app/node_modules
+    depends_on:
+      auth:
+        condition: service_healthy
+      metrics:
+        condition: service_healthy
+      benchmark:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    networks:
+      - backend
+
+  # Authentication Service
+  auth:
+    build:
+      context: ./services/auth
+      target: development
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - POSTGRES_URL=postgres://user:password@postgres:5432/startup_metrics
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services/auth:/app:delegated
+      - auth_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.25'
+    networks:
+      - backend
+
+  # Metrics Service
+  metrics:
+    build:
+      context: ./services/metrics
+      target: development
+    ports:
+      - "50051:50051"
+    environment:
+      - NODE_ENV=development
+      - PORT=50051
+      - POSTGRES_URL=postgres://user:password@postgres:5432/startup_metrics
+      - REDIS_URL=redis://redis:6379
+      - UV_THREADPOOL_SIZE=4
+    volumes:
+      - ./services/metrics:/app:delegated
+      - metrics_node_modules:/app/node_modules
+      - /tmp:/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    networks:
+      - backend
+
+  # Benchmark Service
+  benchmark:
+    build:
+      context: ./services/benchmark
+      target: development
+    ports:
+      - "50052:50051"
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PORT=50051
+      - POSTGRES_URL=postgres://user:password@postgres:5432/startup_metrics
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/benchmark_metrics
+      - WORKERS=4
+    volumes:
+      - ./services/benchmark:/app:delegated
+      - benchmark_tmp:/tmp/benchmark_metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    networks:
+      - backend
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=startup_metrics
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d startup_metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    networks:
+      - backend
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.25'
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+    name: startup_metrics_postgres_data
+  redis_data:
+    name: startup_metrics_redis_data
+  api_gateway_node_modules:
+  auth_node_modules:
+  metrics_node_modules:
+  benchmark_tmp:
+
+networks:
+  backend:
+    driver: bridge
+    name: startup_metrics_backend
