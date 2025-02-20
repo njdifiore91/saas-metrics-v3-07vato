@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: startup-metrics
+  labels:
+    app: startup-metrics-platform
+    component: redis
+    managed-by: kustomize
+spec:
+  serviceName: redis
+  replicas: 3
+  selector:
+    matchLabels:
+      app: startup-metrics-platform
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: startup-metrics-platform
+        component: redis
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: component
+                operator: In
+                values:
+                - redis
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: redis
+        image: redis:7.0-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: redis-config
+          mountPath: /usr/local/etc/redis
+          readOnly: true
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: startup-metrics
+  labels:
+    app: startup-metrics-platform
+    component: redis
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  selector:
+    app: startup-metrics-platform
+    component: redis
+  clusterIP: None
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: startup-metrics
+  labels:
+    app: startup-metrics-platform
+    component: redis
+data:
+  redis.conf: |
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+    appendonly yes
+    appendfsync everysec
+    timeout 300
+    tcp-keepalive 60
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
