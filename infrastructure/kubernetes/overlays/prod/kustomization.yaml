@@ -1,0 +1,120 @@
+# Kustomize configuration for production environment
+# Version: v5.0.0
+# Purpose: Production-specific customizations and resource configurations
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Production namespace configuration
+namespace: startup-metrics-prod
+
+# Base resources to be customized
+resources:
+- ../../base/namespace.yaml
+- ../../base/api-gateway.yaml
+- ../../base/auth-service.yaml
+- ../../base/benchmark-service.yaml
+- ../../base/metrics-service.yaml
+- ../../base/redis.yaml
+- ../../base/postgres.yaml
+
+# Production-specific patches for high availability and performance
+patches:
+# API Gateway deployment patch for high availability
+- target:
+    kind: Deployment
+    name: api-gateway
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: api-gateway
+    spec:
+      replicas: 5
+      template:
+        spec:
+          containers:
+          - name: api-gateway
+            resources:
+              requests:
+                cpu: 500m
+                memory: 512Mi
+              limits:
+                cpu: 1000m
+                memory: 1Gi
+
+# Benchmark service deployment patch for data processing capacity
+- target:
+    kind: Deployment
+    name: benchmark-service
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: benchmark-service
+    spec:
+      replicas: 4
+      template:
+        spec:
+          containers:
+          - name: benchmark-service
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 1Gi
+              limits:
+                cpu: 2000m
+                memory: 2Gi
+
+# Production environment configuration
+configMapGenerator:
+- name: startup-metrics-config
+  namespace: startup-metrics-prod
+  behavior: merge
+  literals:
+  - ENVIRONMENT=production
+  - LOG_LEVEL=info
+  - METRICS_RETENTION_DAYS=90
+  - CACHE_TTL=3600
+
+# Common labels for all resources
+commonLabels:
+  environment: production
+  app: startup-metrics
+  managed-by: kustomize
+
+# Common annotations for all resources
+commonAnnotations:
+  maintainer: "platform-team"
+  contact: "platform@startup-metrics.com"
+  environment.startup-metrics.com/name: "production"
+
+# Images should be explicitly tagged for production
+images:
+- name: startup-metrics/api-gateway
+  newTag: stable
+- name: startup-metrics/auth-service
+  newTag: stable
+- name: startup-metrics/benchmark-service
+  newTag: stable
+- name: startup-metrics/metrics-service
+  newTag: stable
+
+# Resource quota to ensure cluster stability
+quotas:
+- name: startup-metrics-quota
+  namespace: startup-metrics-prod
+  spec:
+    hard:
+      cpu: "16"
+      memory: 32Gi
+      pods: "50"
+
+# Network policies for production security
+networkPolicies:
+- name: default-deny
+  spec:
+    podSelector: {}
+    policyTypes:
+    - Ingress
+    - Egress
