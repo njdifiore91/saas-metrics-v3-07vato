@@ -1,0 +1,176 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/web/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/web/**'
+      - '.github/workflows/frontend-ci.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18.x'
+  WORKING_DIRECTORY: 'src/web'
+  COVERAGE_THRESHOLD: 80
+
+jobs:
+  setup:
+    name: Setup Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    outputs:
+      cache-hit: ${{ steps.npm-cache.outputs.cache-hit }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+
+      - name: Cache Dependencies
+        id: npm-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/node_modules
+            ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install Dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm ci
+
+  quality:
+    name: Code Quality
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/node_modules
+            ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Run ESLint
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run lint
+
+      - name: Type Check
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run type-check
+
+  test:
+    name: Unit Tests
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/node_modules
+            ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Run Tests with Coverage
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run test:coverage
+
+      - name: Upload Coverage Report
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: ${{ env.WORKING_DIRECTORY }}/coverage
+          retention-days: 14
+
+  build:
+    name: Production Build
+    needs: [quality, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/node_modules
+            ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Build Application
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Upload Build Artifacts
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: production-build
+          path: ${{ env.WORKING_DIRECTORY }}/dist
+          retention-days: 14
+
+  notify:
+    name: Notification
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
