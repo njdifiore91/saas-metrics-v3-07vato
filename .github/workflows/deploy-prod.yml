@@ -1,0 +1,230 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version'
+        required: true
+        type: string
+      canary_percentage:
+        description: 'Initial percentage of traffic for canary'
+        required: false
+        default: '10'
+        type: number
+
+env:
+  AWS_REGION: us-east-1
+  SECONDARY_REGION: us-west-2
+  TF_VERSION: '1.5.0'
+  NODE_VERSION: '20.x'
+  DEPLOY_ENV: 'production'
+  HEALTH_CHECK_PATH: '/health'
+  CANARY_METRICS: 'error_rate,latency_p95,cpu_utilization'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      primary_cluster: ${{ steps.tf-output.outputs.primary_cluster_id }}
+      secondary_cluster: ${{ steps.tf-output.outputs.secondary_cluster_id }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 3600
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=production/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infrastructure
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="environment=production" \
+            -var="primary_region=${{ env.AWS_REGION }}" \
+            -var="secondary_region=${{ env.SECONDARY_REGION }}" \
+            -out=tfplan
+        working-directory: infrastructure
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: infrastructure
+
+      - name: Get Terraform Outputs
+        id: tf-output
+        run: |
+          echo "primary_cluster_id=$(terraform output -raw primary_cluster_id)" >> $GITHUB_OUTPUT
+          echo "secondary_cluster_id=$(terraform output -raw secondary_cluster_id)" >> $GITHUB_OUTPUT
+        working-directory: infrastructure
+
+  deploy-services:
+    name: Deploy Services
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          registries: ${{ secrets.ECR_REGISTRY }}
+
+      - name: Download Backend Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: backend-dist
+
+      - name: Deploy Blue Environment
+        id: deploy-blue
+        run: |
+          aws ecs update-service \
+            --cluster ${{ needs.deploy-infrastructure.outputs.primary_cluster }} \
+            --service startup-metrics-blue \
+            --force-new-deployment \
+            --health-check-grace-period-seconds 60
+
+      - name: Deploy Canary
+        if: success()
+        run: |
+          aws ecs update-service \
+            --cluster ${{ needs.deploy-infrastructure.outputs.primary_cluster }} \
+            --service startup-metrics-canary \
+            --force-new-deployment \
+            --desired-count 2
+
+      - name: Monitor Canary Health
+        run: |
+          ./scripts/monitor-canary.sh \
+            --cluster ${{ needs.deploy-infrastructure.outputs.primary_cluster }} \
+            --service startup-metrics-canary \
+            --duration 900 \
+            --threshold-error-rate 0.001 \
+            --threshold-latency 2000 \
+            --threshold-cpu 80
+
+      - name: Traffic Shift
+        if: success()
+        run: |
+          for i in {20..100..20}; do
+            aws elbv2 modify-listener \
+              --listener-arn ${{ secrets.PROD_LISTENER_ARN }} \
+              --default-actions '[{"Type":"forward","ForwardConfig":{"TargetGroups":[{"TargetGroupArn":"${{ secrets.BLUE_TARGET_GROUP }}","Weight":'$i'},{"TargetGroupArn":"${{ secrets.GREEN_TARGET_GROUP }}","Weight":'$((100-i))'}]}}]'
+            
+            sleep 600
+            
+            ./scripts/validate-deployment.sh \
+              --endpoint https://app.startupmetrics.com \
+              --error-threshold 0.001
+          done
+
+      - name: Cleanup Old Environment
+        if: success()
+        run: |
+          aws ecs update-service \
+            --cluster ${{ needs.deploy-infrastructure.outputs.primary_cluster }} \
+            --service startup-metrics-green \
+            --desired-count 0
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Download Frontend Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend-dist
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload to S3
+        run: |
+          aws s3 sync frontend-dist/ s3://${{ secrets.PROD_FRONTEND_BUCKET }} \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.PROD_CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+  post-deployment:
+    name: Post Deployment Tasks
+    needs: [deploy-services, deploy-frontend]
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Run E2E Tests
+        run: |
+          ./scripts/run-e2e-tests.sh \
+            --url https://app.startupmetrics.com \
+            --timeout 300
+
+      - name: Verify Metrics
+        run: |
+          ./scripts/verify-deployment-metrics.sh \
+            --cluster ${{ needs.deploy-infrastructure.outputs.primary_cluster }} \
+            --service startup-metrics-blue \
+            --duration 900
+
+      - name: Create Release Tag
+        if: success()
+        run: |
+          git tag -a v${{ github.event.inputs.version || github.sha }} -m "Production release ${{ github.event.inputs.version || github.sha }}"
+          git push origin v${{ github.event.inputs.version || github.sha }}
+
+      - name: Notify Stakeholders
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
