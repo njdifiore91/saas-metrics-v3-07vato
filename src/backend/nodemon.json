@@ -1,0 +1,30 @@
+{
+  "watch": [
+    "services/**/src/**/*",
+    "proto/**/*"
+  ],
+  "ext": "ts,js,json,proto",
+  "ignore": [
+    "node_modules",
+    "**/dist",
+    "**/coverage",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    ".git",
+    "docker-compose.yml",
+    ".env",
+    ".env.*"
+  ],
+  "exec": "ts-node --transpile-only ./services/api-gateway/src/app.ts",
+  "verbose": true,
+  "delay": "1000",
+  "events": {
+    "restart": "echo \"App restarted due to changes\"",
+    "crash": "echo \"App crashed - waiting for file changes before starting...\"",
+    "start": "echo \"Starting development server...\""
+  },
+  "env": {
+    "NODE_ENV": "development",
+    "TS_NODE_PROJECT": "./tsconfig.json"
+  }
+}
