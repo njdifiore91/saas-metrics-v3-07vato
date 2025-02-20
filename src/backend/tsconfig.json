@@ -1,0 +1,63 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": [
+      "ES2022",
+      "ESNext.AsyncIterable"
+    ],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowJs": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "baseUrl": "./",
+    "paths": {
+      "@services/*": ["services/*"],
+      "@proto/*": ["proto/*"]
+    },
+    "types": ["node"],
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "incremental": true,
+    "composite": true,
+    "removeComments": false,
+    "preserveConstEnums": true,
+    "importHelpers": true,
+    "pretty": true,
+    "newLine": "lf"
+  },
+  "include": [
+    "services/**/*.ts",
+    "proto/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/dist",
+    "**/coverage",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ],
+  "ts-node": {
+    "transpileOnly": true,
+    "files": true
+  },
+  "watchOptions": {
+    "watchFile": "useFsEvents",
+    "watchDirectory": "useFsEvents",
+    "fallbackPolling": "dynamicPriority"
+  }
+}
