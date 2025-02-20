@@ -1,0 +1,88 @@
+#------------------------------------------------------------------------------
+# Server Settings
+#------------------------------------------------------------------------------
+server.name: startup-metrics-kibana
+server.host: "0.0.0.0"
+server.port: 5601
+server.basePath: ""
+server.rewriteBasePath: false
+server.maxPayloadBytes: 1048576
+
+#------------------------------------------------------------------------------
+# Elasticsearch Connection
+#------------------------------------------------------------------------------
+# Kibana 7.17.0
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+elasticsearch.preserveHost: true
+elasticsearch.requestTimeout: 30000
+elasticsearch.shardTimeout: 30000
+elasticsearch.startupTimeout: 5000
+
+#------------------------------------------------------------------------------
+# Security Settings
+#------------------------------------------------------------------------------
+xpack.security.enabled: true
+xpack.security.encryptionKey: ${KIBANA_ENCRYPTION_KEY}
+xpack.reporting.encryptionKey: ${REPORTING_ENCRYPTION_KEY}
+xpack.encryptedSavedObjects.encryptionKey: ${SAVED_OBJECTS_ENCRYPTION_KEY}
+
+# Session Management
+xpack.security.session.idleTimeout: "1h"
+xpack.security.session.lifespan: "24h"
+
+#------------------------------------------------------------------------------
+# Monitoring Settings
+#------------------------------------------------------------------------------
+# Container Monitoring
+monitoring.ui.container.elasticsearch.enabled: true
+monitoring.ui.container.logstash.enabled: true
+
+# X-Pack Monitoring
+xpack.monitoring.enabled: true
+xpack.monitoring.collection.enabled: true
+
+#------------------------------------------------------------------------------
+# Logging Settings
+#------------------------------------------------------------------------------
+logging.dest: stdout
+logging.quiet: false
+logging.silent: false
+logging.verbose: false
+logging.json: true
+
+#------------------------------------------------------------------------------
+# CORS and API Settings
+#------------------------------------------------------------------------------
+server.cors.enabled: true
+server.cors.allowCredentials: false
+server.cors.allowOrigin: ["*"]
+
+#------------------------------------------------------------------------------
+# Saved Objects Settings
+#------------------------------------------------------------------------------
+xpack.savedObjects.maxImportPayloadBytes: 26214400
+xpack.savedObjects.maxImportExportSize: 10000
+
+#------------------------------------------------------------------------------
+# Reporting Settings
+#------------------------------------------------------------------------------
+xpack.reporting.enabled: true
+xpack.reporting.capture.timeouts.waitForElements: 5000
+xpack.reporting.csv.maxSizeBytes: 10485760
+
+#------------------------------------------------------------------------------
+# Search Settings
+#------------------------------------------------------------------------------
+elasticsearch.pingTimeout: 1500
+elasticsearch.requestHeadersWhitelist: [ authorization,securitytenant ]
+
+#------------------------------------------------------------------------------
+# Default Index Pattern
+#------------------------------------------------------------------------------
+kibana.defaultAppId: "home"
+kibana.index: ".kibana"
+
+#------------------------------------------------------------------------------
+# Telemetry Settings
+#------------------------------------------------------------------------------
+telemetry.enabled: false
