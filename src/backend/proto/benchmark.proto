@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package startup.metrics.benchmark.v1;
+
+import "google/protobuf/timestamp.proto";  // v3.21.0
+import "google/protobuf/empty.proto";      // v3.21.0
+import "metrics.proto";
+
+option go_package = "./benchmark";
+option java_package = "com.startup.metrics.benchmark.v1";
+
+// Strictly defined revenue ranges for benchmark comparison
+enum RevenueRange {
+  REVENUE_RANGE_UNSPECIFIED = 0;
+  REVENUE_RANGE_1M_5M = 1;      // $1M - $5M ARR
+  REVENUE_RANGE_5M_10M = 2;     // $5M - $10M ARR
+  REVENUE_RANGE_10M_50M = 3;    // $10M - $50M ARR
+  REVENUE_RANGE_50M_PLUS = 4;   // $50M+ ARR
+}
+
+// Benchmark data source information
+message BenchmarkSource {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Timestamp last_updated = 3;
+  bool is_verified = 4;
+  map<string, string> metadata = 5;
+}
+
+// Core benchmark data structure
+message BenchmarkData {
+  string id = 1;
+  string metric_id = 2;
+  string source_id = 3;
+  RevenueRange revenue_range = 4;
+  double value = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+  metrics.ValidationStatus validation_status = 8;
+  map<string, string> metadata = 9;
+}
+
+// Statistical metrics for benchmark analysis
+message BenchmarkStatistics {
+  double mean = 1;
+  double median = 2;
+  double percentile_25 = 3;
+  double percentile_75 = 4;
+  double standard_deviation = 5;
+  int32 sample_size = 6;
+}
+
+// Request to retrieve benchmark data
+message GetBenchmarkRequest {
+  RevenueRange revenue_range = 1;
+  metrics.MetricType metric_type = 2;
+  repeated string source_ids = 3;
+  google.protobuf.Timestamp period_start = 4;
+  google.protobuf.Timestamp period_end = 5;
+  bool include_statistics = 6;
+}
+
+// Response containing benchmark data
+message GetBenchmarkResponse {
+  repeated BenchmarkData data = 1;
+  BenchmarkStatistics statistics = 2;
+  repeated BenchmarkSource sources = 3;
+  metrics.ValidationResult validation = 4;
+}
+
+// Request for time-series benchmark data
+message GetTimeSeriesRequest {
+  RevenueRange revenue_range = 1;
+  metrics.MetricType metric_type = 2;
+  google.protobuf.Timestamp period_start = 3;
+  google.protobuf.Timestamp period_end = 4;
+  string granularity = 5;  // daily, weekly, monthly, quarterly
+  repeated string source_ids = 6;
+}
+
+// Time-series data point
+message TimeSeriesPoint {
+  google.protobuf.Timestamp timestamp = 1;
+  double value = 2;
+  BenchmarkStatistics statistics = 3;
+  int32 sample_size = 4;
+}
+
+// Response containing time-series benchmark data
+message GetTimeSeriesResponse {
+  repeated TimeSeriesPoint data_points = 1;
+  repeated BenchmarkSource sources = 2;
+  metrics.ValidationResult validation = 3;
+  map<string, double> trend_indicators = 4;
+}
+
+// Request to calculate ranking
+message CalculateRankingRequest {
+  double metric_value = 1;
+  RevenueRange revenue_range = 2;
+  metrics.MetricType metric_type = 3;
+  google.protobuf.Timestamp period = 4;
+  repeated string source_ids = 5;
+}
+
+// Response containing ranking information
+message CalculateRankingResponse {
+  double percentile = 1;
+  int32 rank = 2;
+  int32 total_companies = 3;
+  BenchmarkStatistics peer_statistics = 4;
+  metrics.ValidationResult validation = 5;
+}
+
+// BenchmarkService provides comprehensive benchmark operations
+service BenchmarkService {
+  // Retrieves benchmark data with validation and source tracking
+  rpc GetBenchmarkData(GetBenchmarkRequest) returns (GetBenchmarkResponse) {}
+
+  // Retrieves time-series benchmark data with trend analysis
+  rpc GetTimeSeriesData(GetTimeSeriesRequest) returns (GetTimeSeriesResponse) {}
+
+  // Calculates percentile ranking with peer comparison
+  rpc CalculateRanking(CalculateRankingRequest) returns (CalculateRankingResponse) {}
+}
