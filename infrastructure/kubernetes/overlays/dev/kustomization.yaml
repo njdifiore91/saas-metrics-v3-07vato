@@ -1,0 +1,102 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Development environment namespace configuration
+namespace: dev-startup-metrics
+namePrefix: dev-
+
+# Common labels and annotations for all resources
+commonLabels:
+  environment: development
+  managed-by: kustomize
+  debug-enabled: "true"
+
+commonAnnotations:
+  environment.type: development
+  monitoring.enabled: "true"
+  debug.enabled: "true"
+  development.startup-metrics.io/debug-ports: "enabled"
+  development.startup-metrics.io/log-level: "debug"
+
+# Base resources to be customized
+resources:
+  - ../../base/namespace.yaml
+  - ../../base/api-gateway.yaml
+  - ../../base/auth-service.yaml
+  - ../../base/benchmark-service.yaml
+  - ../../base/metrics-service.yaml
+  - ../../base/redis.yaml
+  - ../../base/postgres.yaml
+
+# Development-specific patches
+patches:
+  # Resource limits and environment configuration for all deployments
+  - target:
+      kind: Deployment
+      name: ".*"
+    patch: |
+      spec:
+        template:
+          spec:
+            containers:
+              - name: ".*"
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 128Mi
+                  limits:
+                    cpu: 200m
+                    memory: 256Mi
+                env:
+                  - name: NODE_ENV
+                    value: development
+                  - name: DEBUG
+                    value: "true"
+                  - name: LOG_LEVEL
+                    value: debug
+                livenessProbe:
+                  initialDelaySeconds: 30
+                  periodSeconds: 15
+                readinessProbe:
+                  initialDelaySeconds: 20
+                  periodSeconds: 10
+
+  # Development HPA configuration
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: ".*"
+    patch: |
+      spec:
+        minReplicas: 1
+        maxReplicas: 3
+        metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 70
+
+# ConfigMap for development environment
+configMapGenerator:
+  - name: dev-config
+    literals:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=debug
+      - DEBUG_PORTS=enabled
+      - METRICS_ENABLED=true
+
+# Development image configuration
+images:
+  - name: api-gateway
+    newName: startup-metrics/api-gateway
+    newTag: dev
+  - name: auth-service
+    newName: startup-metrics/auth-service
+    newTag: dev
+  - name: benchmark-service
+    newName: startup-metrics/benchmark-service
+    newTag: dev
+  - name: metrics-service
+    newName: startup-metrics/metrics-service
+    newTag: dev
