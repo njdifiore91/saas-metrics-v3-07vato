@@ -1,0 +1,158 @@
+# Prometheus configuration v2.45.0
+# Global configuration for all jobs
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    environment: production
+    region: us-east-1
+
+# Rule files specifying alerting and recording rules
+rule_files:
+  - "rules/service_availability.yml"
+  - "rules/response_time.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - "alertmanager:9093"
+      scheme: http
+      timeout: 10s
+      api_version: v2
+
+# Scrape configurations for monitoring targets
+scrape_configs:
+  # API Gateway monitoring
+  - job_name: api_gateway
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['api-gateway:3000']
+        labels:
+          service: api_gateway
+          environment: production
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: http_.*
+        action: keep
+
+  # Auth Service monitoring
+  - job_name: auth_service
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['auth-service:3001']
+        labels:
+          service: auth_service
+          environment: production
+
+  # Metrics Service monitoring
+  - job_name: metrics_service
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['metrics-service:3002']
+        labels:
+          service: metrics_service
+          environment: production
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_port_name]
+        regex: grpc
+        action: keep
+
+  # Benchmark Service monitoring
+  - job_name: benchmark_service
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['benchmark-service:3003']
+        labels:
+          service: benchmark_service
+          environment: production
+
+# Alerting rules
+alerting_rules:
+  - name: service_availability
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service has been down for more than 1 minute"
+          runbook_url: "https://wiki.example.com/runbooks/service-down"
+
+  - name: response_time
+    rules:
+      - alert: HighResponseTime
+        expr: http_request_duration_seconds > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High response time on {{ $labels.job }}"
+          description: "Response time is above 2 seconds threshold for 5 minutes"
+          runbook_url: "https://wiki.example.com/runbooks/high-latency"
+
+# Additional service-specific monitoring rules
+  - name: metrics_service_rules
+    rules:
+      - alert: MetricsServiceHighMemory
+        expr: process_resident_memory_bytes{service="metrics_service"} > 512 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Metrics Service high memory usage"
+          description: "Memory usage above 512MB for 5 minutes"
+
+      - alert: MetricsServiceHighCPU
+        expr: rate(process_cpu_seconds_total{service="metrics_service"}[5m]) * 100 > 70
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Metrics Service high CPU usage"
+          description: "CPU usage above 70% for 5 minutes"
+
+# Recording rules for common queries
+recording_rules:
+  - name: service_metrics
+    rules:
+      - record: job:request_duration_seconds:avg_rate5m
+        expr: rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])
+      - record: job:request_errors:rate5m
+        expr: rate(http_requests_total{status=~"5.."}[5m])
+
+# Storage configuration
+storage:
+  tsdb:
+    path: /prometheus
+    retention:
+      time: 15d
+      size: 50GB
+    wal:
+      retention:
+        time: 12h
+
+# Remote write configuration for long-term storage
+remote_write:
+  - url: "http://thanos-receive:19291/api/v1/receive"
+    remote_timeout: 30s
+    queue_config:
+      capacity: 10000
+      max_shards: 200
+      max_samples_per_send: 500
