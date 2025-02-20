@@ -1,0 +1,51 @@
+# for different parts of the startup metrics platform codebase.
+# Format: path/to/file team-or-username[@organization]
+
+# Default owners for everything in the repo
+* @startup-metrics/lead-architects
+
+# Security-Critical Components
+/src/backend/services/auth/** @startup-metrics/security-team @startup-metrics/lead-architects
+/src/backend/services/database/migrations/** @startup-metrics/security-team @startup-metrics/database-team
+
+# Backend Services
+/src/backend/services/metrics/** @startup-metrics/backend-team
+/src/backend/services/benchmark/** @startup-metrics/backend-team
+/src/backend/** @startup-metrics/backend-team
+
+# Frontend Application
+/src/web/components/** @startup-metrics/frontend-team
+/src/web/pages/** @startup-metrics/frontend-team
+/src/web/** @startup-metrics/frontend-team
+
+# Infrastructure
+/infrastructure/terraform/** @startup-metrics/devops-team
+/infrastructure/kubernetes/** @startup-metrics/devops-team
+/infrastructure/** @startup-metrics/devops-team
+
+# Database
+/src/backend/services/database/prisma/** @startup-metrics/database-team
+/src/backend/services/database/** @startup-metrics/database-team
+
+# Documentation
+/docs/api/** @startup-metrics/tech-writers @startup-metrics/backend-team
+/docs/architecture/** @startup-metrics/tech-writers @startup-metrics/lead-architects
+*.md @startup-metrics/tech-writers
+/docs/** @startup-metrics/tech-writers
+
+# GitHub Specific Files
+/.github/** @startup-metrics/devops-team
+
+# Test Files
+/tests/** @startup-metrics/qa-team
+
+# Package Dependencies
+/package.json @startup-metrics/lead-architects
+/yarn.lock @startup-metrics/lead-architects
+
+# Environment and Configuration
+*.env* @startup-metrics/security-team @startup-metrics/devops-team
+/config/** @startup-metrics/devops-team
+
+# CI/CD Pipeline
+/.github/workflows/** @startup-metrics/devops-team
