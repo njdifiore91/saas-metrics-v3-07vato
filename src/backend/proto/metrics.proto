@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package startup.metrics.metrics.v1;
+
+import "google/protobuf/timestamp.proto";  // v3.21.0
+import "google/protobuf/empty.proto";      // v3.21.0
+import "google/protobuf/wrappers.proto";   // v3.21.0
+
+option go_package = "./metrics";
+option java_package = "com.startup.metrics.metrics.v1";
+option java_multiple_files = true;
+
+// Supported metric types based on technical specifications
+enum MetricType {
+  METRIC_TYPE_UNSPECIFIED = 0;
+  METRIC_TYPE_NDR = 1;                    // Net Dollar Retention
+  METRIC_TYPE_MAGIC_NUMBER = 2;           // Sales Efficiency
+  METRIC_TYPE_CAC_PAYBACK = 3;            // Customer Acquisition Cost Payback
+  METRIC_TYPE_PIPELINE_COVERAGE = 4;      // Pipeline to Target Ratio
+}
+
+// Validation status for metric operations
+enum ValidationStatus {
+  VALIDATION_STATUS_UNSPECIFIED = 0;
+  VALIDATION_STATUS_VALID = 1;
+  VALIDATION_STATUS_INVALID = 2;
+  VALIDATION_STATUS_WARNING = 3;
+}
+
+// Common validation result structure
+message ValidationResult {
+  ValidationStatus status = 1;
+  string code = 2;
+  string message = 3;
+  map<string, string> details = 4;
+}
+
+// Base metric structure
+message Metric {
+  string id = 1;
+  string company_id = 2;
+  MetricType type = 3;
+  double value = 4;
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  google.protobuf.Timestamp created_at = 7;
+  map<string, string> metadata = 8;
+}
+
+// Create metric request
+message CreateMetricRequest {
+  string company_id = 1;
+  MetricType type = 2;
+  double value = 3;
+  google.protobuf.Timestamp period_start = 4;
+  google.protobuf.Timestamp period_end = 5;
+  map<string, string> metadata = 6;
+}
+
+// Create metric response
+message CreateMetricResponse {
+  Metric metric = 1;
+  ValidationResult validation = 2;
+}
+
+// Get metrics request with filtering and pagination
+message GetMetricsRequest {
+  string company_id = 1;
+  repeated MetricType types = 2;
+  google.protobuf.Timestamp period_start = 3;
+  google.protobuf.Timestamp period_end = 4;
+  int32 page_size = 5;
+  string page_token = 6;
+  bool include_validation = 7;
+}
+
+// Get metrics response
+message GetMetricsResponse {
+  repeated Metric metrics = 1;
+  string next_page_token = 2;
+  map<string, ValidationResult> validations = 3;
+}
+
+// Calculate metric request
+message CalculateMetricRequest {
+  string company_id = 1;
+  MetricType type = 2;
+  google.protobuf.Timestamp period = 3;
+  map<string, double> input_values = 4;
+}
+
+// Calculate metric response
+message CalculateMetricResponse {
+  double calculated_value = 1;
+  ValidationResult validation = 2;
+  map<string, double> component_values = 3;
+}
+
+// Validate metric request
+message ValidateMetricRequest {
+  string company_id = 1;
+  MetricType type = 2;
+  double value = 3;
+  google.protobuf.Timestamp period_start = 4;
+  google.protobuf.Timestamp period_end = 5;
+  map<string, double> related_metrics = 6;
+}
+
+// Validate metric response
+message ValidateMetricResponse {
+  ValidationResult validation = 1;
+  map<string, ValidationResult> component_validations = 2;
+  repeated string suggested_corrections = 3;
+}
+
+// MetricsService provides comprehensive metric operations
+service MetricsService {
+  // Creates a new metric with validation
+  rpc CreateMetric(CreateMetricRequest) returns (CreateMetricResponse) {}
+
+  // Retrieves metrics with filtering and pagination
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse) {}
+
+  // Calculates derived metrics using standardized formulas
+  rpc CalculateMetric(CalculateMetricRequest) returns (CalculateMetricResponse) {}
+
+  // Validates metrics against business rules
+  rpc ValidateMetric(ValidateMetricRequest) returns (ValidateMetricResponse) {}
+}
