@@ -1,0 +1,58 @@
+{
+  "compilerOptions": {
+    // Modern JavaScript features support
+    "target": "ES2020",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    
+    // Module resolution and imports
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    
+    // Emit configuration
+    "noEmit": true,
+    "jsx": "react-jsx",
+    
+    // Type checking and strict rules
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    
+    // Additional checks and features
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowSyntheticDefaultImports": true,
+    
+    // Type definitions
+    "types": [
+      "vite/client",
+      "jest",
+      "node"
+    ]
+  },
+  
+  // File inclusion/exclusion
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "coverage"
+  ],
+  
+  // Project references
+  "references": []
+}
