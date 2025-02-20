@@ -1,0 +1,94 @@
+# Elasticsearch 7.17.0 Configuration File
+# Purpose: Core configuration for ELK stack's search and analytics engine
+
+#------------------------------------------------------------------------------
+# Cluster Settings
+#------------------------------------------------------------------------------
+cluster.name: startup-metrics-cluster
+cluster.initial_master_nodes: ["startup-metrics-node-1"]
+discovery.seed_hosts: ["127.0.0.1"]
+discovery.type: single-node
+
+# Disk-based shard allocation settings
+cluster.routing.allocation.disk.threshold_enabled: true
+cluster.routing.allocation.disk.watermark.low: "85%"
+cluster.routing.allocation.disk.watermark.high: "90%"
+
+#------------------------------------------------------------------------------
+# Node Settings
+#------------------------------------------------------------------------------
+node.name: startup-metrics-node-1
+node.master: true
+node.data: true
+node.ingest: true
+node.max_local_storage_nodes: 1
+bootstrap.memory_lock: true
+
+#------------------------------------------------------------------------------
+# Network Settings
+#------------------------------------------------------------------------------
+network.host: 0.0.0.0
+http.port: 9200
+transport.port: 9300
+
+# CORS Settings
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+#------------------------------------------------------------------------------
+# Path Settings
+#------------------------------------------------------------------------------
+path.data: /usr/share/elasticsearch/data
+path.logs: /usr/share/elasticsearch/logs
+
+#------------------------------------------------------------------------------
+# Memory Settings
+#------------------------------------------------------------------------------
+bootstrap.system_call_filter: true
+indices.memory.index_buffer_size: "30%"
+indices.queries.cache.size: "20%"
+
+#------------------------------------------------------------------------------
+# Security Settings
+#------------------------------------------------------------------------------
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+xpack.monitoring.enabled: true
+xpack.monitoring.collection.enabled: true
+
+#------------------------------------------------------------------------------
+# Index Settings
+#------------------------------------------------------------------------------
+action.auto_create_index: ".monitoring-*,.watches,.triggered_watches,.watcher-history-*"
+indices.fielddata.cache.size: "30%"
+indices.breaker.total.use_real_memory: true
+indices.breaker.fielddata.limit: "60%"
+indices.recovery.max_bytes_per_sec: "50mb"
+
+#------------------------------------------------------------------------------
+# Thread Pool Settings
+#------------------------------------------------------------------------------
+thread_pool:
+  write:
+    size: 32
+    queue_size: 1000
+  search:
+    size: 16
+    queue_size: 1000
+  get:
+    size: 16
+    queue_size: 1000
+
+#------------------------------------------------------------------------------
+# Gateway Settings
+#------------------------------------------------------------------------------
+gateway.recover_after_nodes: 1
+gateway.recover_after_time: "5m"
+gateway.expected_nodes: 1
+
+#------------------------------------------------------------------------------
+# Various Settings
+#------------------------------------------------------------------------------
+action.destructive_requires_name: true
+reindex.remote.whitelist: ["*:9200"]
+search.max_buckets: 100000
