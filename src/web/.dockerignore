@@ -1,0 +1,107 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+.npm/
+
+# Testing
+coverage/
+__tests__/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+cypress/
+cypress.config.ts
+jest.config.ts
+test-results/
+playwright/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+storybook-static/
+
+# Development
+.env
+.env.*
+.env.local
+.env.development
+.env.test
+.env.production
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+tmp/
+temp/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+Thumbs.db
+.editorconfig
+.prettierrc*
+.eslintrc*
+.stylelintrc*
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+.github/
+.gitlab-ci.yml
+
+# Documentation
+docs/
+*.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+api-docs/
+README.md
+
+# Configuration files not needed in production
+tsconfig.*.json
+vite.config.ts.timestamp-*
+postcss.config.*
+tailwind.config.*
+webpack.config.*
+babel.config.*
+
+# Security and credentials
+**/*.pem
+**/*.key
+**/*.crt
+**/*.cert
+.npmrc
+.yarnrc
+auth.json
+security-scan-results/
+dependency-audit/
+
+# Development tools and analysis
+.lighthouse/
+.scannerwork/
+.sourcemaps/
+coverage-report/
+bundle-analysis/
+stats.json
+
+# Misc
+.husky/
+.docker/
+docker-compose*.yml
+Dockerfile*
+!Dockerfile
+nginx*.conf
+!nginx.conf
+!nginx-security-headers.conf
