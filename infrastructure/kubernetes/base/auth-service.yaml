@@ -1,0 +1,140 @@
+# Kubernetes configuration for Authentication Service
+# Version: v1.25+
+# Dependencies:
+# - Node.js: 20.x
+# - OAuth 2.0 with PKCE
+# - JWT token management
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: startup-metrics
+  labels:
+    app: auth-service
+    component: authentication
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+        component: authentication
+    spec:
+      containers:
+      - name: auth-service
+        image: startup-metrics/auth-service:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "768Mi"
+        readinessProbe:
+          httpGet:
+            path: /oauth/health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        - name: JWT_EXPIRY
+          value: "3600" # 1 hour in seconds
+        - name: REFRESH_TOKEN_EXPIRY
+          value: "2592000" # 30 days in seconds
+        - name: OAUTH_CALLBACK_URL
+          valueFrom:
+            configMapKeyRef:
+              name: auth-config
+              key: oauth_callback_url
+        envFrom:
+        - secretRef:
+            name: oauth-credentials
+        - secretRef:
+            name: jwt-secret
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: oauth-config
+          mountPath: /etc/auth/oauth
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: oauth-config
+        secret:
+          secretName: oauth-config
+      securityContext:
+        fsGroup: 1000
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - auth-service
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: startup-metrics
+  labels:
+    app: auth-service
+    component: authentication
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3000
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: auth-service
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800 # 3 hours
