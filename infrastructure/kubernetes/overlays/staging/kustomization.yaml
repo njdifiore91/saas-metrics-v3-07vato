@@ -1,0 +1,107 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base resources to be customized
+resources:
+- ../../base/namespace.yaml
+- ../../base/api-gateway.yaml
+- ../../base/auth-service.yaml
+- ../../base/benchmark-service.yaml
+- ../../base/metrics-service.yaml
+- ../../base/redis.yaml
+- ../../base/postgres.yaml
+
+# Target namespace for all resources
+namespace: startup-metrics-staging
+
+# Common labels applied to all resources
+commonLabels:
+  environment: staging
+  managed-by: kustomize
+  app.kubernetes.io/environment: staging
+  backup.enabled: "true"
+  monitoring.enabled: "true"
+
+# Common annotations applied to all resources
+commonAnnotations:
+  environment.type: staging
+  monitoring.enabled: "true"
+  backup.schedule: "0 0 * * *"
+  deployment.timestamp: ${TIMESTAMP}
+  prometheus.io/scrape: "true"
+  prometheus.io/port: metrics
+  logging.enabled: "true"
+
+# Image customizations for staging environment
+images:
+- name: api-gateway
+  newName: startup-metrics/api-gateway
+  newTag: staging
+- name: auth-service
+  newName: startup-metrics/auth-service
+  newTag: staging
+- name: benchmark-service
+  newName: startup-metrics/benchmark-service
+  newTag: staging
+- name: metrics-service
+  newName: startup-metrics/metrics-service
+  newTag: staging
+
+# Resource patches for staging environment
+patches:
+# API Gateway resource limits and replicas
+- target:
+    kind: Deployment
+    name: api-gateway
+  patch: |
+    [
+      {"op": "replace", "path": "/spec/replicas", "value": 2},
+      {"op": "replace", "path": "/spec/template/spec/containers/0/resources/limits/cpu", "value": "500m"},
+      {"op": "replace", "path": "/spec/template/spec/containers/0/resources/limits/memory", "value": "512Mi"}
+    ]
+
+# Benchmark service resource limits and replicas
+- target:
+    kind: Deployment
+    name: benchmark-service
+  patch: |
+    [
+      {"op": "replace", "path": "/spec/replicas", "value": 2},
+      {"op": "replace", "path": "/spec/template/spec/containers/0/resources/limits/cpu", "value": "1000m"},
+      {"op": "replace", "path": "/spec/template/spec/containers/0/resources/limits/memory", "value": "1Gi"}
+    ]
+
+# HorizontalPodAutoscaler configurations
+- target:
+    kind: HorizontalPodAutoscaler
+    name: .*
+  patch: |
+    [
+      {"op": "replace", "path": "/spec/minReplicas", "value": 2},
+      {"op": "replace", "path": "/spec/maxReplicas", "value": 4},
+      {"op": "replace", "path": "/spec/targetCPUUtilizationPercentage", "value": 70}
+    ]
+
+# ConfigMap generation for staging environment
+configMapGenerator:
+- name: staging-config
+  literals:
+  - ENVIRONMENT=staging
+  - LOG_LEVEL=info
+  - METRICS_ENABLED=true
+  - TRACING_ENABLED=true
+  - BACKUP_ENABLED=true
+
+# Secret generation for staging environment
+secretGenerator:
+- name: staging-secrets
+  type: Opaque
+  files:
+  - secrets/jwt-secret
+  - secrets/db-credentials
+  - secrets/api-keys
+
+# Default replica count for all deployments
+replicas:
+- name: .*
+  count: 2
