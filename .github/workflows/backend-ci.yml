@@ -1,0 +1,251 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, develop, 'feature/*' ]
+    paths:
+      - 'src/backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/backend/**'
+  schedule:
+    - cron: '0 0 * * *'  # Daily security scans
+
+env:
+  NODE_VERSION: '20.x'
+  NPM_VERSION: '9.x'
+  NODE_ENV: 'test'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+jobs:
+  security-scan:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+          queries: security-extended,security-and-quality
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          cd src/backend
+          npm ci
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:javascript"
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'startup-metrics-backend'
+          path: 'src/backend'
+          format: 'HTML'
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+            --suppression suppress.xml
+
+      - name: Upload Security Results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: dependency-check-report.sarif
+
+  build:
+    name: Build and Validate
+    runs-on: ubuntu-latest
+    needs: security-scan
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/backend/node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install Dependencies
+        run: |
+          cd src/backend
+          npm ci
+
+      - name: Generate Protocol Buffers
+        run: |
+          cd src/backend
+          npm run proto:generate
+
+      - name: Lint Code
+        run: |
+          cd src/backend
+          npm run lint
+        env:
+          MAX_WARNINGS: 0
+          MAX_ERRORS: 0
+
+      - name: Build Services
+        run: |
+          cd src/backend
+          npm run build
+
+      - name: Cache Build Artifacts
+        uses: actions/cache@v3
+        with:
+          path: src/backend/dist
+          key: ${{ runner.os }}-build-${{ github.sha }}
+
+      - name: SonarCloud Analysis
+        uses: SonarSource/sonarcloud-github-action@v1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: src/backend
+          args: >
+            -Dsonar.organization=startup-metrics
+            -Dsonar.projectKey=startup-metrics-backend
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/test/**
+            -Dsonar.qualitygate.wait=true
+
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: build
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: startup_metrics_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Restore Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/backend/node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install Dependencies
+        run: |
+          cd src/backend
+          npm ci
+
+      - name: Run Unit Tests
+        run: |
+          cd src/backend
+          npm run test
+        env:
+          TEST_TIMEOUT: 30000
+          REDIS_URL: redis://localhost:6379
+          DATABASE_URL: postgresql://test:test@localhost:5432/startup_metrics_test
+
+      - name: Run Integration Tests
+        run: |
+          cd src/backend
+          npm run test:integration
+        env:
+          TEST_TIMEOUT: 30000
+          REDIS_URL: redis://localhost:6379
+          DATABASE_URL: postgresql://test:test@localhost:5432/startup_metrics_test
+
+      - name: Generate Coverage Report
+        run: |
+          cd src/backend
+          npm run test:coverage
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: src/backend/coverage
+          retention-days: 14
+
+      - name: Check Coverage Thresholds
+        run: |
+          cd src/backend
+          npx jest --coverage --coverageThreshold='{"global":{"branches":90,"functions":90,"lines":90,"statements":90}}'
+
+notifications:
+  slack:
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  teams:
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: toko-bifrost/ms-teams-deploy-card@master
+        with:
+          webhook-uri: ${{ secrets.TEAMS_WEBHOOK }}
+          card-layout-start: cozy
+          card-layout-exit: complete
+          show-on-start: true
+          show-on-exit: true
+          timezone: 'UTC'
