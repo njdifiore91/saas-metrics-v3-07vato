@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package startup.metrics.auth;
+
+import "google/protobuf/timestamp.proto";  // v3 - For token expiry timestamps
+
+// Service definition for authentication operations implementing OAuth 2.0 with PKCE
+service AuthService {
+  // Generates Google OAuth authorization URL with PKCE challenge
+  rpc GetAuthUrl(AuthUrlRequest) returns (AuthUrlResponse) {}
+
+  // Processes OAuth callback and generates JWT tokens with proper expiry
+  rpc HandleOAuthCallback(OAuthCallbackRequest) returns (TokenResponse) {}
+
+  // Refreshes expired access token using valid refresh token
+  rpc RefreshToken(RefreshTokenRequest) returns (TokenResponse) {}
+
+  // Validates JWT access token and returns user information
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse) {}
+}
+
+// Request message for getting OAuth URL with PKCE
+message AuthUrlRequest {
+  string redirect_uri = 1;
+}
+
+// Response containing OAuth authorization URL and PKCE challenge
+message AuthUrlResponse {
+  string auth_url = 1;
+  string state = 2;
+  string code_challenge = 3;
+}
+
+// Request message for OAuth callback handling with PKCE verification
+message OAuthCallbackRequest {
+  string code = 1;
+  string state = 2;
+  string code_verifier = 3;
+}
+
+// Response containing JWT tokens with expiry information
+message TokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  string token_type = 4;  // Always "Bearer"
+}
+
+// Request message for token refresh operation
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+// Request message for token validation
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+// Response containing token validation result with user details
+message ValidateTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+  string role = 3;
+  string error_message = 4;  // Only populated when valid = false
+}
