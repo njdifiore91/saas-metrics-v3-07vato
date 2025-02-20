@@ -1,0 +1,68 @@
+# Grafana v9.5.3 datasource provisioning configuration
+apiVersion: 1
+
+# List of data sources to be provisioned
+datasources:
+  # Prometheus datasource configuration
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    version: 1
+    editable: false
+    
+    # JSON data configuration
+    jsonData:
+      # Scrape interval from prometheus.yml
+      timeInterval: "15s"
+      # Query timeout setting
+      queryTimeout: "30s"
+      # HTTP method for queries
+      httpMethod: "POST"
+      # Enable exemplars for high cardinality data
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
+      # Alert manager configuration
+      alertmanagerUid: alertmanager
+      # Custom query parameters
+      customQueryParameters: ""
+      # Disable metrics lookup
+      disableMetricsLookup: false
+      # Prometheus type
+      prometheusType: Prometheus
+      # Prometheus version
+      prometheusVersion: 2.45.0
+      
+    # Security and access settings  
+    secureJsonData:
+      # No credentials needed for internal access
+      httpHeaderValue1: ""
+    
+    # Basic auth configuration - disabled for internal network
+    basicAuth: false
+    basicAuthUser: ""
+    
+    # TLS/SSL configuration - disabled for internal network
+    tlsAuth: false
+    tlsAuthWithCACert: false
+    
+    # Allowed HTTP methods
+    httpMethod: POST
+    
+    # Labels and annotations
+    labels:
+      environment: production
+      service: monitoring
+    
+    # Health check configuration  
+    healthCheck:
+      enabled: true
+      frequency: 60
+      timeout: 30
+
+# Deletion settings
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
